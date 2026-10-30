@@ -1,0 +1,37 @@
+version: 2
+
+updates:
+  # Go module dependencies (go.mod / go.sum)
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "deps"
+    groups:
+      go-minor-patch:
+        update-types: [minor, patch]
+
+  # Actions used in .github/workflows
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # golang base images in Dockerfile and testbackend/Dockerfile
+  - package-ecosystem: docker
+    directories:
+      - /
+      - /testbackend
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "docker"
+    groups:
+      docker-images:
+        patterns: ["*"]
