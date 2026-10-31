@@ -66,9 +66,9 @@ func (r *Registry) Up(addr string) int64 {
 }
 
 func (r *Registry) BackendAddrs() []string {
-	addrs := make([]string, 0, len(r.states))
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	addrs := make([]string, 0, len(r.states))
 
 	for a := range r.states {
 		addrs = append(addrs, a)
