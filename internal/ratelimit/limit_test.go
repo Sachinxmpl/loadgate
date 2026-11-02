@@ -78,3 +78,15 @@ func TestLRU_EvictsBeyondCap(t *testing.T) {
 		t.Error("a was evicted or replaced; it should have survived (recently used)")
 	}
 }
+
+func TestLimiter_AbuserDoesNotStarveOthers(t *testing.T) {
+	l := New(100, 10)
+
+	for i := 0; i < 200; i++ {
+		l.Allow("abuser")
+	}
+
+	if !l.Allow("innocent") {
+		t.Fatal("innocent client rejected: abuser drained the global bucket")
+	}
+}
