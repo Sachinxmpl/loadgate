@@ -221,3 +221,26 @@ func get(t *testing.T, s *Server, path string) {
 	}
 	drain(resp)
 }
+
+// A slow BE but healthy must be served
+func TestServeHTTP_SlowBackendWithinResponseHeaderTimeout(t *testing.T) {
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(400 * time.Millisecond)
+		io.WriteString(w, "slow but fine")
+	}))
+	defer slow.Close()
+
+	cfg := singlePoolL7(slow)
+	cfg.Health.Passive.Fall = 1
+	cfg.Timeouts.ResponseHeader = config.Duration(2 * time.Second)
+	s := newL7(t, cfg)
+
+	resp := mustGet(t, s, "/")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 from a 400ms backend", resp.StatusCode)
+	}
+	addr := strings.TrimPrefix(slow.URL, "http://")
+	if !s.registry.Get(addr).Admits() {
+		t.Error("slow but healthy backend was evicted")
+	}
+}
