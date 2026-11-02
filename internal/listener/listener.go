@@ -21,6 +21,7 @@ import (
 const (
 	acceptBackOffMin = 5 * time.Millisecond
 	acceptBackOfMax  = time.Second
+	maxDialAttempts  = 3 // total tries across distinct healthy backends
 )
 
 type Server struct {
@@ -166,29 +167,12 @@ func (s *Server) handle(conn net.Conn) {
 
 	cfg := s.store.Load()
 
-	pool := balancer.HealthyBackends(cfg.L4Pool(), s.registry)
-
-	backend, err := s.balancer.Pick(clientKey(conn), pool)
-	if err != nil {
-		log.Warn("no backend for connection", "err", err)
+	backend, up := s.dialBackend(clientKey(conn), cfg, log)
+	if up == nil {
 		return
 	}
 	log = log.With("backend", backend.Addr)
 	log.Info("l4 backend selected")
-
-	up, err := net.DialTimeout("tcp", backend.Addr, cfg.Timeouts.Dial.Std())
-	if err != nil {
-		st := s.registry.Get(backend.Addr)
-		before := st.Phase()
-		st.ReportFailure(cfg.Health.Passive.Fall)
-
-		if after := st.Phase(); after != before {
-			s.metrics.HealthTransition(backend.Addr, after.String())
-		}
-
-		log.Warn("dial backend failed", "err", err)
-		return
-	}
 
 	st := s.registry.Get(backend.Addr)
 	st.ReportSuccess()
@@ -197,6 +181,39 @@ func (s *Server) handle(conn net.Conn) {
 
 	log.Debug("proxying l4 connection")
 	proxy.L4(conn, up, cfg.Timeouts.Drain.Std())
+}
+
+// Picks and dials up to maxDialAttempts distinct healthy backends and returns the first one that connects, or nil if none did.
+// Retry in l4 - safe -> a failed dial means no client byte has reached any backend.
+func (s *Server) dialBackend(key string, cfg *config.Config, log *slog.Logger) (*config.Backend, net.Conn) {
+	tried := make(map[string]bool)
+
+	for attempt := range maxDialAttempts {
+		pool := balancer.Untried(balancer.HealthyBackends(cfg.L4Pool(), s.registry), tried)
+
+		backend, err := s.balancer.Pick(key, pool)
+		if err != nil {
+			log.Warn("no backend for connection", "tried", len(tried), "err", err)
+			return nil, nil
+		}
+		tried[backend.Addr] = true
+
+		up, err := net.DialTimeout("tcp", backend.Addr, cfg.Timeouts.Dial.Std())
+		if err == nil {
+			return backend, up
+		}
+
+		st := s.registry.Get(backend.Addr)
+		before := st.Phase()
+		st.ReportFailure(cfg.Health.Passive.Fall)
+		if after := st.Phase(); after != before {
+			s.metrics.HealthTransition(backend.Addr, after.String())
+		}
+		log.Warn("dial backend failed", "backend", backend.Addr, "attempt", attempt+1, "err", err)
+	}
+
+	log.Warn("all dial attempts failed", "tried", len(tried))
+	return nil, nil
 }
 
 func clientKey(conn net.Conn) string {

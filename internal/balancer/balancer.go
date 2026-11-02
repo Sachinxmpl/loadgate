@@ -38,6 +38,21 @@ func New(alg config.Algorithm, counter ConnCounter) (Balancer, error) {
 	}
 }
 
+// Untried returns the backends in pool whose address is not in tried.
+// Used by retry loops so each attempt goes to a different backend.
+func Untried(pool []config.Backend, tried map[string]bool) []config.Backend {
+	if len(tried) == 0 {
+		return pool
+	}
+	out := make([]config.Backend, 0, len(pool))
+	for _, b := range pool {
+		if !tried[b.Addr] {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
 func HealthyBackends(pool []config.Backend, reg *health.Registry) []config.Backend {
 	out := make([]config.Backend, 0, len(pool))
 	for _, b := range pool {

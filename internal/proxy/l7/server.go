@@ -154,7 +154,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.Context().Err() != nil {
 			return
 		}
-		pool := untried(balancer.HealthyBackends(cfg.Pools[poolName], s.registry), tried)
+		pool := balancer.Untried(balancer.HealthyBackends(cfg.Pools[poolName], s.registry), tried)
 
 		backend, err := s.balancer.Pick(clientIP(r), pool)
 		if err != nil {
@@ -239,19 +239,6 @@ func (s *Server) reportFailure(st *health.State, backend *config.Backend, cfg *c
 	if after == health.Evicted {
 		s.transport.CloseIdleConnections()
 	}
-}
-
-func untried(pool []config.Backend, tried map[string]bool) []config.Backend {
-	if len(tried) == 0 {
-		return pool
-	}
-	out := make([]config.Backend, 0, len(pool))
-	for _, b := range pool {
-		if !tried[b.Addr] {
-			out = append(out, b)
-		}
-	}
-	return out
 }
 
 // isIdempotent reports whether a method is safe to replay on another backend.
