@@ -2,7 +2,7 @@
 
 # E5 - What does the health loop buy?
 # One backend is "sick": it accepts connections but never responds in time (60s delay,
-# past the proxy's 300ms header timeout). Compare the full health loop (passive eviction
+# past the 300ms response_header timeout set below). Compare the full health loop (passive eviction
 # on) against active-only (passive disabled). Round-robin is used so the health loop is
 # the ONLY thing that can route around the sick backend.
 
@@ -34,7 +34,7 @@ trap cleanup EXIT
 
 wait_up() { for _ in $(seq 1 100); do curl -s -o /dev/null "$1" && return 0; sleep 0.1; done; echo "timeout $1" >&2; exit 1; }
 
-# two healthy backends and one sick one (60s delay > 300ms header timeout).
+# two healthy backends and one sick one (60s delay > the 300ms response_header timeout set below).
 NAME=b1 PORT=9501 DELAY=5ms "$BACKEND" & pids+=($!)
 NAME=b2 PORT=9502 DELAY=5ms "$BACKEND" & pids+=($!)
 NAME=b3 PORT=9503 DELAY=60s "$BACKEND" & pids+=($!)
@@ -47,6 +47,8 @@ run_balancer() { # label fall
 mode: l7
 listen: "$LISTEN"
 balancer: round_robin
+timeouts:
+  response_header: 300ms
 health:
   active:
     interval: 2s

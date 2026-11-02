@@ -84,7 +84,7 @@ Every connection was established; none failed.
 
 **Question.** When one backend is slow, does the choice of balancing algorithm actually matter?
 
-**Method.** Three backends: two fast (5 ms) and one slow (150 ms). Send 1000 requests/second for 30 seconds through LoadGate (L7), once with `round_robin` and once with `least_connections`, then compare the latencies. The slow backend is 150 ms (not slower) so it stays under the proxy's 300 ms response-header timeout and is not treated as failed.
+**Method.** Three backends: two fast (5 ms) and one slow (150 ms). Send 1000 requests/second for 30 seconds through LoadGate (L7), once with `round_robin` and once with `least_connections`, then compare the latencies. The slow backend is 150 ms (not slower) so it stays under the 300 ms `response_header` timeout configured for this experiment and is not treated as failed.
 
 **Result.**
 
@@ -122,7 +122,7 @@ Ideal for 10 backends is 1/N = 10.0%.
 
 **Question.** When a backend is sick — accepting connections but not responding in time — does the health loop keep traffic away from it?
 
-**Method.** Three backends: two healthy (5 ms) and one sick (60 s delay, past the proxy's 300 ms header timeout, so every request to it times out). Send 1000 requests/second for 30 seconds through LoadGate (L7, round_robin), once with the passive path enabled (`fall = 3`) and once with it disabled (`fall = 1000000`, i.e. active-only). Round-robin is used so the health loop is the only mechanism that can route around the sick backend.
+**Method.** Three backends: two healthy (5 ms) and one sick (60 s delay, past the 300 ms `response_header` timeout configured for this experiment, so every request to it times out). Send 1000 requests/second for 30 seconds through LoadGate (L7, round_robin), once with the passive path enabled (`fall = 3`) and once with it disabled (`fall = 1000000`, i.e. active-only). Round-robin is used so the health loop is the only mechanism that can route around the sick backend.
 
 **Result.**
 
