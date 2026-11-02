@@ -172,14 +172,13 @@ func (s *Server) handle(conn net.Conn) {
 		return
 	}
 	log = log.With("backend", backend.Addr)
-	log.Info("l4 backend selected")
+	log.Debug("l4 backend selected")
 
 	st := s.registry.Get(backend.Addr)
 	st.ReportSuccess()
 	st.AddConn()
 	defer st.RemoveConn()
 
-	log.Debug("proxying l4 connection")
 	proxy.L4(conn, up, cfg.Timeouts.Drain.Std())
 }
 

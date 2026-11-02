@@ -83,7 +83,7 @@ LoadGate is configured by a single YAML file. Top-level fields:
 | `listen` | string | *required* | address to bind, e.g. `0.0.0.0:8080` |
 | `balancer` | string | `round_robin` | `round_robin`, `weighted_round_robin`, `least_connections`, or `consistent_hash` |
 | `tls` | object | *disabled* | L7 only. `{ cert, key }` paths; presence enables HTTPS |
-| `timeouts` | object | dial `2s`, read/write/request `30s`, response_header `10s`, idle `60s`, drain `15s` | connection and request deadlines |
+| `timeouts` | object | dial `2s`, read/write/request `30s`, response_header `10s`, idle `60s`, drain `15s` | connection and request deadlines (L4 uses only `dial` and `drain`) |
 | `health` | object | active `{ interval 2s, timeout 500ms, rise 2 }`, passive `{ fall 3, cooldown 10s }` | probing/readmission and eviction thresholds |
 | `rate_limit` | object | `0` (unlimited) | `global_rps`, `per_client_rps` |
 | `routes` | list | *required for L7* | `{ match: { path_prefix }, pool }`, longest prefix wins |
