@@ -236,6 +236,8 @@ func TestServeHTTP_SlowBackendWithinResponseHeaderTimeout(t *testing.T) {
 	s := newL7(t, cfg)
 
 	resp := mustGet(t, s, "/")
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200 from a 400ms backend", resp.StatusCode)
 	}

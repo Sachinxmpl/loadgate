@@ -21,9 +21,8 @@ import (
 // readHeaderTimeout bounds how long a client may take to send its request headers.
 // Prevents slowloris attacks.
 const (
-	readHeaderTimeout            = 5 * time.Second
-	backendResponseHeaderTimeout = 300 * time.Millisecond
-	maxAttempts                  = 3 // total tries across distinct healthy backends
+	readHeaderTimeout = 5 * time.Second
+	maxAttempts       = 3 // total tries across distinct healthy backends
 )
 
 type Server struct {
@@ -76,7 +75,7 @@ func New(o Options) *Server {
 		MaxIdleConns:          100,
 		MaxIdleConnsPerHost:   8,
 		IdleConnTimeout:       15 * time.Second,
-		ResponseHeaderTimeout: backendResponseHeaderTimeout,
+		ResponseHeaderTimeout: o.Config.Timeouts.ResponseHeader.Std(),
 		ForceAttemptHTTP2:     false,
 	}
 

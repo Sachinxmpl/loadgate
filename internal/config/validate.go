@@ -82,6 +82,7 @@ func (t Timeouts) validate() error {
 		{"write", t.Write},
 		{"idle", t.Idle},
 		{"request", t.Request},
+		{"response_header", t.ResponseHeader},
 		{"drain", t.Drain},
 	}
 	for _, f := range fields {
