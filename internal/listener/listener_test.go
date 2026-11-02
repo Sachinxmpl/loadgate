@@ -264,3 +264,52 @@ func TestHandle_EvictsDeadBackend(t *testing.T) {
 	}
 
 }
+
+// A refused dial must be retried on another backend, so the client never notices the dead one
+// Fall is high so the dead backend stays in the rotation and every round-robin cycle hits it.
+func TestHandle_RetriesDialOnAnotherBackend(t *testing.T) {
+	live, stopLive := echoBackend(t)
+	defer stopLive()
+
+	deadLn, _ := net.Listen("tcp", "127.0.0.1:0")
+	dead := deadLn.Addr().String()
+	deadLn.Close()
+
+	cfg := &config.Config{
+		Mode:   config.ModeL4,
+		Listen: "127.0.0.1:0",
+		Health: config.Health{Passive: config.PassiveHealth{Fall: 100}},
+		Timeouts: config.Timeouts{
+			Dial:  config.Duration(200 * time.Millisecond),
+			Drain: config.Duration(time.Second),
+		},
+		Pools: map[string][]config.Backend{
+			"default": {
+				{Addr: live, Weight: 1},
+				{Addr: dead, Weight: 1},
+			},
+		},
+	}
+	reg := health.NewRegistry()
+	reg.Reconcile(cfg.BackendAddrs())
+
+	bal, err := balancer.New(config.AlgRoundRobin, reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := New(Options{Addr: cfg.Listen, Store: config.NewStore(cfg), Balancer: bal, Registry: reg, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err := srv.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		srv.ShutDown(ctx)
+	})
+
+	for i := 0; i < 6; i++ {
+		if !roundTrip(srv.Addr().String(), []byte("ping\n")) {
+			t.Errorf("connection %d failed; want it retried on the live backend", i)
+		}
+	}
+}
