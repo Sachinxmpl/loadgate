@@ -284,6 +284,20 @@ pools:
 			wantErr: "timeouts.dial",
 		},
 		{
+			name: "tls in l4 mode",
+			src: `
+mode: l4
+listen: ":8080"
+tls:
+  cert: cert.pem
+  key: key.pem
+pools:
+  default:
+    - addr: "127.0.0.1:9001"
+`,
+			wantErr: "tls: not allowed in l4 mode",
+		},
+		{
 			name: "probe timeout exceeds interval",
 			src: `
 mode: l4
@@ -511,10 +525,13 @@ pools:
 		{
 			name: "tls without key",
 			src: `
-mode: l4
+mode: l7
 listen: ":8080"
 tls:
   cert: /tmp/x.crt
+routes:
+  - match: { path_prefix: "/" }
+    pool: default
 pools:
   default:
     - addr: "127.0.0.1:9001"
@@ -524,10 +541,13 @@ pools:
 		{
 			name: "tls without cert",
 			src: `
-mode: l4
+mode: l7
 listen: ":8080"
 tls:
   key: /tmp/x.key
+routes:
+  - match: { path_prefix: "/" }
+    pool: default
 pools:
   default:
     - addr: "127.0.0.1:9001"
