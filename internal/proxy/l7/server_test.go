@@ -248,7 +248,7 @@ func TestServeHTTP_SlowBackendWithinResponseHeaderTimeout(t *testing.T) {
 	}
 }
 
-// A streamed respponse must reach the client as the backend sends it
+// A streamed response must reach the client as the backend sends it
 func TestServeHTTP_StreamsWithoutBuffering(t *testing.T) {
 	release := make(chan struct{})
 	be := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

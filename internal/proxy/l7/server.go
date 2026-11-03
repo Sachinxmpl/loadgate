@@ -231,7 +231,7 @@ func (s *Server) forwardOnce(w http.ResponseWriter, r *http.Request, cfg *config
 }
 
 // Copies the backend's body to the client.
-// When stream is true the boday has no known length (SSE, chunked), so each piece is flushed to the client as soon as it arrives
+// When stream is true the body has no known length (SSE, chunked), so each piece is flushed to the client as soon as it arrives
 func copyBody(w http.ResponseWriter, body io.Reader, stream bool) error {
 	if !stream {
 		_, err := io.Copy(w, body)
