@@ -82,6 +82,7 @@ func (t Timeouts) validate() error {
 		{"write", t.Write},
 		{"idle", t.Idle},
 		{"request", t.Request},
+		{"response_header", t.ResponseHeader},
 		{"drain", t.Drain},
 	}
 	for _, f := range fields {
@@ -184,6 +185,9 @@ func (c *Config) validateModeKeys() error {
 	if c.Mode == ModeL4 {
 		if c.Routes != nil {
 			return errors.New("routes: not allowed in l4 mode (routing required l7)")
+		}
+		if c.TLS != nil {
+			return errors.New("tls: not allowed in l4 mode (TLS termination requires l7)")
 		}
 		if len(c.Pools) != 1 {
 			return fmt.Errorf("pools: l4 mode requires exactly one pool, got %d", len(c.Pools))

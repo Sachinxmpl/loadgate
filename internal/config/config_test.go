@@ -34,6 +34,7 @@ func TestParse_MinimalConfig(t *testing.T) {
 		{"timeouts.write", c.Timeouts.Write.Std(), 30 * time.Second},
 		{"timeouts.idle", c.Timeouts.Idle.Std(), 60 * time.Second},
 		{"timeouts.request", c.Timeouts.Request.Std(), 30 * time.Second},
+		{"timeouts.response_header", c.Timeouts.ResponseHeader.Std(), 10 * time.Second},
 		{"timeouts.drain", c.Timeouts.Drain.Std(), 15 * time.Second},
 		{"health.active.interval", c.Health.Active.Interval.Std(), 2 * time.Second},
 		{"health.active.timeout", c.Health.Active.Timeout.Std(), 500 * time.Millisecond},
@@ -71,6 +72,7 @@ timeouts:
   write: 11s
   idle: 12s
   request: 13s
+  response_header: 5s
   drain: 14s
 health:
   active:
@@ -117,6 +119,7 @@ pools:
 		{"timeouts.write", c.Timeouts.Write.Std(), 11 * time.Second},
 		{"timeouts.idle", c.Timeouts.Idle.Std(), 12 * time.Second},
 		{"timeouts.request", c.Timeouts.Request.Std(), 13 * time.Second},
+		{"timeouts.response_header", c.Timeouts.ResponseHeader.Std(), 5 * time.Second},
 		{"timeouts.drain", c.Timeouts.Drain.Std(), 14 * time.Second},
 		{"health.active.interval", c.Health.Active.Interval.Std(), 3 * time.Second},
 		{"health.active.timeout", c.Health.Active.Timeout.Std(), 250 * time.Millisecond},
@@ -279,6 +282,20 @@ pools:
     - addr: "127.0.0.1:9001"
 `,
 			wantErr: "timeouts.dial",
+		},
+		{
+			name: "tls in l4 mode",
+			src: `
+mode: l4
+listen: ":8080"
+tls:
+  cert: cert.pem
+  key: key.pem
+pools:
+  default:
+    - addr: "127.0.0.1:9001"
+`,
+			wantErr: "tls: not allowed in l4 mode",
 		},
 		{
 			name: "probe timeout exceeds interval",
@@ -508,10 +525,13 @@ pools:
 		{
 			name: "tls without key",
 			src: `
-mode: l4
+mode: l7
 listen: ":8080"
 tls:
   cert: /tmp/x.crt
+routes:
+  - match: { path_prefix: "/" }
+    pool: default
 pools:
   default:
     - addr: "127.0.0.1:9001"
@@ -521,10 +541,13 @@ pools:
 		{
 			name: "tls without cert",
 			src: `
-mode: l4
+mode: l7
 listen: ":8080"
 tls:
   key: /tmp/x.key
+routes:
+  - match: { path_prefix: "/" }
+    pool: default
 pools:
   default:
     - addr: "127.0.0.1:9001"

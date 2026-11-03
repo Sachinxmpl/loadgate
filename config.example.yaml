@@ -7,12 +7,10 @@ balancer: consistent_hash # round_robin , weighted_round_robin
                              # least_connections consistent_hash
 
 timeouts:
-  dial: 2s                   # max time to establish a backend connection
-  read: 30s                  # max time waiting for backend data
-  write: 30s                 # max time writing to a peer
-  idle: 60s                  # L7 keep-alive idle limit
-  request: 30s               # L7 end-to-end per-request budget
-  drain: 15s                 # how long shutdown waits for in-flight conns
+  dial: 2s                   # max time to connect to a backend
+  drain: 15s                 # how long shutdown waits for open connections
+  # read, write, idle, request and response_header apply to l7 only
+  # (see configl7.example.yaml); l4 ignores them.
 
 health:
   active:

@@ -18,12 +18,13 @@ import (
 const (
 	defaultBalancer = AlgRoundRobin
 
-	defaultDialTimeout    = 2 * time.Second
-	defaultReadTimeout    = 30 * time.Second
-	defaultWriteTimeout   = 30 * time.Second
-	defaultIdleTimeout    = 60 * time.Second
-	defaultRequestTimeout = 30 * time.Second
-	defaultDrainTimeout   = 15 * time.Second
+	defaultDialTimeout           = 2 * time.Second
+	defaultReadTimeout           = 30 * time.Second
+	defaultWriteTimeout          = 30 * time.Second
+	defaultIdleTimeout           = 60 * time.Second
+	defaultRequestTimeout        = 30 * time.Second
+	defaultResponseHeaderTimeout = 10 * time.Second
+	defaultDrainTimeout          = 15 * time.Second
 
 	defaultProbeInterval = 2 * time.Second
 	defaultProbeTimeout  = 500 * time.Millisecond
@@ -91,6 +92,7 @@ func (c *Config) applyDefaults() {
 	setDefaultDuration(&c.Timeouts.Write, defaultWriteTimeout)
 	setDefaultDuration(&c.Timeouts.Idle, defaultIdleTimeout)
 	setDefaultDuration(&c.Timeouts.Request, defaultRequestTimeout)
+	setDefaultDuration(&c.Timeouts.ResponseHeader, defaultResponseHeaderTimeout)
 	setDefaultDuration(&c.Timeouts.Drain, defaultDrainTimeout)
 
 	setDefaultDuration(&c.Health.Active.Interval, defaultProbeInterval)

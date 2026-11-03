@@ -31,16 +31,16 @@ func New(globalRPS, perClientRPS int) *Limiter {
 }
 
 func (l *Limiter) Allow(clientIP string) bool {
-	if l.global != nil && !l.global.Allow() {
-		return false
+	// client's own bucket first
+	if l.perClientRPS > 0 {
+		l.mu.Lock()
+		cl := l.clients.get(clientIP, func() *rate.Limiter {
+			return rate.NewLimiter(l.perClientRPS, l.perClientBurst)
+		})
+		l.mu.Unlock()
+		if !cl.Allow() {
+			return false
+		}
 	}
-	if l.perClientRPS == 0 {
-		return true
-	}
-	l.mu.Lock()
-	cl := l.clients.get(clientIP, func() *rate.Limiter {
-		return rate.NewLimiter(l.perClientRPS, l.perClientBurst)
-	})
-	l.mu.Unlock()
-	return cl.Allow()
+	return l.global == nil || l.global.Allow()
 }

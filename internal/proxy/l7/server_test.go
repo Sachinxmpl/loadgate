@@ -1,6 +1,7 @@
 package l7
 
 import (
+	"bufio"
 	"context"
 	"io"
 	"log/slog"
@@ -220,4 +221,59 @@ func get(t *testing.T, s *Server, path string) {
 		t.Fatalf("GET %s: %v", path, err)
 	}
 	drain(resp)
+}
+
+// A slow BE but healthy must be served
+func TestServeHTTP_SlowBackendWithinResponseHeaderTimeout(t *testing.T) {
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(400 * time.Millisecond)
+		io.WriteString(w, "slow but fine")
+	}))
+	defer slow.Close()
+
+	cfg := singlePoolL7(slow)
+	cfg.Health.Passive.Fall = 1
+	cfg.Timeouts.ResponseHeader = config.Duration(2 * time.Second)
+	s := newL7(t, cfg)
+
+	resp := mustGet(t, s, "/")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 from a 400ms backend", resp.StatusCode)
+	}
+	addr := strings.TrimPrefix(slow.URL, "http://")
+	if !s.registry.Get(addr).Admits() {
+		t.Error("slow but healthy backend was evicted")
+	}
+}
+
+// A streamed respponse must reach the client as the backend sends it
+func TestServeHTTP_StreamsWithoutBuffering(t *testing.T) {
+	release := make(chan struct{})
+	be := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, "data: first\n\n")
+		w.(http.Flusher).Flush()
+		<-release
+	}))
+	defer be.Close()
+	defer close(release)
+
+	s := newL7(t, singlePoolL7(be))
+
+	client := &http.Client{Timeout: time.Second}
+	resp, err := client.Get("http://" + s.Addr().String() + "/")
+	if err != nil {
+		t.Fatalf("no response within 1s, the stream is being buffered: %v", err)
+	}
+	defer resp.Body.Close()
+
+	line, err := bufio.NewReader(resp.Body).ReadString('\n')
+	if err != nil {
+		t.Fatalf("reading first event: %v", err)
+	}
+	if line != "data: first\n" {
+		t.Errorf("first line = %q, want %q", line, "data: first\n")
+	}
 }

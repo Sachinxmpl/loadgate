@@ -74,12 +74,13 @@ type TLS struct {
 }
 
 type Timeouts struct {
-	Dial    Duration `yaml:"dial"`
-	Read    Duration `yaml:"read"`
-	Write   Duration `yaml:"write"`
-	Idle    Duration `yaml:"idle"`
-	Request Duration `yaml:"request"`
-	Drain   Duration `yaml:"drain"`
+	Dial           Duration `yaml:"dial"`
+	Read           Duration `yaml:"read"`
+	Write          Duration `yaml:"write"`
+	Idle           Duration `yaml:"idle"`
+	Request        Duration `yaml:"request"`
+	ResponseHeader Duration `yaml:"response_header"`
+	Drain          Duration `yaml:"drain"`
 }
 
 type Health struct {

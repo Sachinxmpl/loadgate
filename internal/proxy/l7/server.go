@@ -21,9 +21,8 @@ import (
 // readHeaderTimeout bounds how long a client may take to send its request headers.
 // Prevents slowloris attacks.
 const (
-	readHeaderTimeout            = 5 * time.Second
-	backendResponseHeaderTimeout = 300 * time.Millisecond
-	maxAttempts                  = 3 // total tries across distinct healthy backends
+	readHeaderTimeout = 5 * time.Second
+	maxAttempts       = 3 // total tries across distinct healthy backends
 )
 
 type Server struct {
@@ -76,7 +75,7 @@ func New(o Options) *Server {
 		MaxIdleConns:          100,
 		MaxIdleConnsPerHost:   8,
 		IdleConnTimeout:       15 * time.Second,
-		ResponseHeaderTimeout: backendResponseHeaderTimeout,
+		ResponseHeaderTimeout: o.Config.Timeouts.ResponseHeader.Std(),
 		ForceAttemptHTTP2:     false,
 	}
 
@@ -155,7 +154,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.Context().Err() != nil {
 			return
 		}
-		pool := untried(balancer.HealthyBackends(cfg.Pools[poolName], s.registry), tried)
+		pool := balancer.Untried(balancer.HealthyBackends(cfg.Pools[poolName], s.registry), tried)
 
 		backend, err := s.balancer.Pick(clientIP(r), pool)
 		if err != nil {
@@ -223,10 +222,41 @@ func (s *Server) forwardOnce(w http.ResponseWriter, r *http.Request, cfg *config
 	stripHopByHop(resp.Header)
 	copyHeader(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	if err := copyBody(w, resp.Body, resp.ContentLength == -1); err != nil {
+		s.log.Debug("copying response body", "backend", backend.Addr, "err", err)
+	}
 
 	s.metrics.RequestObserved(backend.Addr, resp.StatusCode, time.Since(start).Seconds())
 	return resultDone
+}
+
+// Copies the backend's body to the client.
+// When stream is true the boday has no known length (SSE, chunked), so each piece is flushed to the client as soon as it arrives
+func copyBody(w http.ResponseWriter, body io.Reader, stream bool) error {
+	if !stream {
+		_, err := io.Copy(w, body)
+		return err
+	}
+
+	rc := http.NewResponseController(w)
+	buf := make([]byte, 32*1024)
+	for {
+		n, err := body.Read(buf)
+		if n > 0 {
+			if _, werr := w.Write(buf[:n]); werr != nil {
+				return werr
+			}
+			if ferr := rc.Flush(); ferr != nil {
+				return ferr
+			}
+		}
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func (s *Server) reportFailure(st *health.State, backend *config.Backend, cfg *config.Config) {
@@ -240,19 +270,6 @@ func (s *Server) reportFailure(st *health.State, backend *config.Backend, cfg *c
 	if after == health.Evicted {
 		s.transport.CloseIdleConnections()
 	}
-}
-
-func untried(pool []config.Backend, tried map[string]bool) []config.Backend {
-	if len(tried) == 0 {
-		return pool
-	}
-	out := make([]config.Backend, 0, len(pool))
-	for _, b := range pool {
-		if !tried[b.Addr] {
-			out = append(out, b)
-		}
-	}
-	return out
 }
 
 // isIdempotent reports whether a method is safe to replay on another backend.

@@ -11,6 +11,7 @@ timeouts:
   write: 30s
   idle: 60s
   request: 30s
+  response_header: 10s
   drain: 15s
 
 health:

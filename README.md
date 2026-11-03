@@ -14,7 +14,7 @@ LoadGate is a modern L4/L7 reverse proxy and load balancer written in Go.
 - **L4 and L7 modes** — raw TCP relay or full HTTP(S) reverse proxy, selected per instance.
 - **Four algorithms** — round-robin, smooth weighted round-robin, least-connections, and consistent hashing (150 vnodes).
 - **Two-plane health checking** — passive eviction on real-traffic failures, active probing for readmission. *Fail fast, recover carefully.*
-- **Automatic failover** — idempotent requests that fail are retried on a healthy backend.
+- **Automatic failover** — L7 retries failed idempotent requests and L4 retries refused connections on another healthy backend.
 - **TLS termination** — HTTPS with hot certificate rotation; swap certs on reload, no restart.
 - **Hot config reload** — `SIGHUP` validate-before-swap: a broken config can never take down a running server.
 - **Rate limiting** — global and per-client token buckets, reject-don't-queue, LRU-bounded.
@@ -82,8 +82,8 @@ LoadGate is configured by a single YAML file. Top-level fields:
 | `mode` | string | *required* | `l4` (TCP relay) or `l7` (HTTP proxy) |
 | `listen` | string | *required* | address to bind, e.g. `0.0.0.0:8080` |
 | `balancer` | string | `round_robin` | `round_robin`, `weighted_round_robin`, `least_connections`, or `consistent_hash` |
-| `tls` | object | *disabled* | `{ cert, key }` paths; presence enables HTTPS |
-| `timeouts` | object | dial `2s`, read/write/request `30s`, idle `60s`, drain `15s` | connection and request deadlines |
+| `tls` | object | *disabled* | L7 only. `{ cert, key }` paths; presence enables HTTPS |
+| `timeouts` | object | dial `2s`, read/write/request `30s`, response_header `10s`, idle `60s`, drain `15s` | connection and request deadlines (L4 uses only `dial` and `drain`) |
 | `health` | object | active `{ interval 2s, timeout 500ms, rise 2 }`, passive `{ fall 3, cooldown 10s }` | probing/readmission and eviction thresholds |
 | `rate_limit` | object | `0` (unlimited) | `global_rps`, `per_client_rps` |
 | `routes` | list | *required for L7* | `{ match: { path_prefix }, pool }`, longest prefix wins |
@@ -107,6 +107,7 @@ timeouts:
   write: 30s
   idle: 60s
   request: 30s
+  response_header: 10s         # max wait for a backend to start answering
   drain: 15s                   # how long shutdown waits for in-flight requests
 
 health:
