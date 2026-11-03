@@ -84,7 +84,7 @@ Every connection was established; none failed.
 
 **Question.** When one backend is slow, does the choice of balancing algorithm actually matter?
 
-**Method.** Three backends: two fast (5 ms) and one slow (150 ms). Send 1000 requests/second for 30 seconds through LoadGate (L7), once with `round_robin` and once with `least_connections`, then compare the latencies. The slow backend is 150 ms (not slower) so it stays under the 300 ms `response_header` timeout configured for this experiment and is not treated as failed.
+**Method.** Three backends: two fast (5 ms) and one slow (150 ms). Send 1000 requests/second for 30 seconds through LoadGate (L7), once with `round_robin` and once with `least_connections`, then compare the latencies. The slow backend is 150 ms (not slower) so it stays under the default 10 s `response_header` timeout and is not treated as failed.
 
 **Result.**
 
