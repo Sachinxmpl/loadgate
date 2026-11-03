@@ -222,10 +222,41 @@ func (s *Server) forwardOnce(w http.ResponseWriter, r *http.Request, cfg *config
 	stripHopByHop(resp.Header)
 	copyHeader(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	if err := copyBody(w, resp.Body, resp.ContentLength == -1); err != nil {
+		s.log.Debug("copying response body", "backend", backend.Addr, "err", err)
+	}
 
 	s.metrics.RequestObserved(backend.Addr, resp.StatusCode, time.Since(start).Seconds())
 	return resultDone
+}
+
+// Copies the backend's body to the client.
+// When stream is true the boday has no known length (SSE, chunked), so each piece is flushed to the client as soon as it arrives
+func copyBody(w http.ResponseWriter, body io.Reader, stream bool) error {
+	if !stream {
+		_, err := io.Copy(w, body)
+		return err
+	}
+
+	rc := http.NewResponseController(w)
+	buf := make([]byte, 32*1024)
+	for {
+		n, err := body.Read(buf)
+		if n > 0 {
+			if _, werr := w.Write(buf[:n]); werr != nil {
+				return werr
+			}
+			if ferr := rc.Flush(); ferr != nil {
+				return ferr
+			}
+		}
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func (s *Server) reportFailure(st *health.State, backend *config.Backend, cfg *config.Config) {
