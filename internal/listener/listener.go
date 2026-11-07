@@ -124,6 +124,7 @@ func (s *Server) acceptLoop() {
 		// or max_connections may already be open
 		if err := s.track(conn); err != nil {
 			if errors.Is(err, errTooManyConns) {
+				s.metrics.ConnLimitRejected()
 				s.log.Debug("connection refused", "client", conn.RemoteAddr().String(), "err", err)
 			}
 			conn.Close()

@@ -86,6 +86,7 @@ LoadGate is configured by a single YAML file. Top-level fields:
 | `timeouts` | object | dial `2s`, read/write/request `30s`, response_header `10s`, idle `60s`, drain `15s` | connection and request deadlines (L4 uses only `dial` and `drain`) |
 | `health` | object | active `{ interval 2s, timeout 500ms, rise 2 }`, passive `{ fall 3, cooldown 10s }` | probing/readmission and eviction thresholds |
 | `rate_limit` | object | `0` (unlimited) | `global_rps`, `per_client_rps` |
+| `max_connections` | int | `0` (unlimited) | L4 only (L7 relies on its read/idle timeouts). Connections over the limit are closed immediately. Keep it below ~⅙ of the FD limit (`ulimit -n`) |
 | `routes` | list | *required for L7* | `{ match: { path_prefix }, pool }`, longest prefix wins |
 | `pools` | map | *required* | named lists of backends: `{ addr, weight }` (`weight` defaults `1`) |
 
@@ -159,7 +160,7 @@ kill -HUP <pid>              hot-reload the config (validate-before-swap)
 
 ## Observability
 
-- **Metrics** — Prometheus format on `-metrics-addr` (default `127.0.0.1:9095/metrics`), with bounded cardinality (labelled by status *class* and backend, never by raw code, path, or client IP). Request counts and duration histograms, active connections, backend up/down, health transitions, rate-limit rejections, and reload outcomes.
+- **Metrics** — Prometheus format on `-metrics-addr` (default `127.0.0.1:9095/metrics`), with bounded cardinality (labelled by status *class* and backend, never by raw code, path, or client IP). Request counts and duration histograms, active connections, backend up/down, health transitions, rate-limit and connection-limit rejections, and reload outcomes.
 - **Dashboard** — a Grafana dashboard is auto-provisioned in the Docker stack (`http://localhost:3000`); it shows a backend being killed, evicted, and readmitted live.
 - **Profiling** — pprof endpoints on the private `-debug-addr` port. Capture a full CPU/heap/goroutine set with `bash test/bench/profile.sh`.
 
