@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"sync"
 	"testing"
@@ -91,25 +92,53 @@ func TestServeHTTP_RoutesLongestPrefix(t *testing.T) {
 	}
 }
 
-// X-Forwarded-For is appended to, not replaced, so an upstream proxy's entry survives.
-func TestServeHTTP_AppendsXForwardedFor(t *testing.T) {
-	var got http.Request
-	be := recordingBackend(t, &got)
-	t.Cleanup(be.Close)
-
-	s := newL7(t, singlePoolL7(be))
+// sendXFF sends a GET with the given X-Forwarded-For header lines and returns the single X-Forwarded-For value the backend received
+func sendXFF(t *testing.T, cfg *config.Config, got *http.Request, lines ...string) string {
+	t.Helper()
+	s := newL7(t, cfg)
 
 	req, _ := http.NewRequest("GET", "http://"+s.Addr().String()+"/", nil)
-	req.Header.Set("X-Forwarded-For", "203.0.113.7") // pretend an upstream proxy
+	for _, l := range lines {
+		req.Header.Add("X-Forwarded-For", l)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	drain(resp)
 
-	xff := got.Header.Get("X-Forwarded-For")
-	if !strings.HasPrefix(xff, "203.0.113.7, ") {
-		t.Errorf("X-Forwarded-For = %q, want the prior value kept then our IP appended", xff)
+	if n := len(got.Header.Values("X-Forwarded-For")); n != 1 {
+		t.Errorf("backend got %d X-Forwarded-For lines, want 1", n)
+	}
+	return got.Header.Get("X-Forwarded-For")
+}
+
+// From a trusted proxy, the whole incoming chain is kept (every header line)
+// the proxy's own IP is appended
+func TestServeHTTP_TrustedProxyKeepsXForwardedForChain(t *testing.T) {
+	var got http.Request
+	be := recordingBackend(t, &got)
+	t.Cleanup(be.Close)
+
+	cfg := singlePoolL7(be)
+	cfg.TrustedProxies = []config.CIDR{{Prefix: netip.MustParsePrefix("127.0.0.1/32")}}
+
+	xff := sendXFF(t, cfg, &got, "203.0.113.7", "198.51.100.1")
+	if want := "203.0.113.7, 198.51.100.1, 127.0.0.1"; xff != want {
+		t.Errorf("X-Forwarded-For = %q, want %q", xff, want)
+	}
+}
+
+// From a client that is not a trusted proxy, any X-Forwarded-For it sent is dropped
+// the backend sees only the client's real address
+func TestServeHTTP_UntrustedClientCannotSpoofXForwardedFor(t *testing.T) {
+	var got http.Request
+	be := recordingBackend(t, &got)
+	t.Cleanup(be.Close)
+
+	xff := sendXFF(t, singlePoolL7(be), &got, "6.6.6.6")
+	if xff != "127.0.0.1" {
+		t.Errorf("X-Forwarded-For = %q, want only the real client IP %q", xff, "127.0.0.1")
 	}
 }
 

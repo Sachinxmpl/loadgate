@@ -192,6 +192,9 @@ func (c *Config) validateModeKeys() error {
 		if c.TLS != nil {
 			return errors.New("tls: not allowed in l4 mode (TLS termination requires l7)")
 		}
+		if len(c.TrustedProxies) > 0 {
+			return errors.New("trusted_proxies: only supported in l7 mode (l4 does not read headers)")
+		}
 		if len(c.Pools) != 1 {
 			return fmt.Errorf("pools: l4 mode requires exactly one pool, got %d", len(c.Pools))
 		}

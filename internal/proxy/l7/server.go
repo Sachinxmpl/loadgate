@@ -197,7 +197,8 @@ func (s *Server) forwardOnce(w http.ResponseWriter, r *http.Request, cfg *config
 	out.Host = r.Host
 
 	stripHopByHop(out.Header)
-	appendXForwardedFor(out, clientIP(r))
+	ip := clientIP(r)
+	setXForwardedFor(out, ip, cfg.IsTrustedProxy(ip))
 
 	resp, err := s.transport.RoundTrip(out)
 	if err != nil {
@@ -318,15 +319,22 @@ func stripHopByHop(h http.Header) {
 	}
 }
 
-// appends clientIP to the reques'ts forwarding trail, preserves addresses of any earlier hops
-func appendXForwardedFor(out *http.Request, clientIP string) {
-	if clientIP == "" {
-		return
+// sets X-Forwarded-For to the forwarding chain plus clientIP.
+// The incoming chain (from every X-Forwarded-For line) is kept only when the direct peer
+// is a trusted proxy; from anyone else it could be made up, so it is dropped
+func setXForwardedFor(out *http.Request, clientIP string, trusted bool) {
+	var chain []string
+	if trusted {
+		chain = append(chain, out.Header.Values("X-Forwarded-For")...)
 	}
-	if prior := out.Header.Get("X-Forwarded-For"); prior != "" {
-		clientIP = prior + ", " + clientIP
+	if clientIP != "" {
+		chain = append(chain, clientIP)
 	}
-	out.Header.Set("X-Forwarded-For", clientIP)
+
+	out.Header.Del("X-Forwarded-For")
+	if len(chain) > 0 {
+		out.Header.Set("X-Forwarded-For", strings.Join(chain, ", "))
+	}
 }
 
 // Copies every header value from src to desk

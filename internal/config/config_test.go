@@ -309,6 +309,33 @@ pools:
 			wantErr: "max_connections: only supported in l4 mode",
 		},
 		{
+			name: "bad trusted_proxies entry",
+			src: `
+mode: l7
+listen: ":8080"
+trusted_proxies: ["10.0.0.0/33"]
+routes:
+  - match: { path_prefix: "/" }
+    pool: default
+pools:
+  default:
+    - addr: "127.0.0.1:9001"
+`,
+			wantErr: `invalid CIDR "10.0.0.0/33"`,
+		},
+		{
+			name: "trusted_proxies in l4 mode",
+			src: `
+mode: l4
+listen: ":8080"
+trusted_proxies: ["10.0.0.0/8"]
+pools:
+  default:
+    - addr: "127.0.0.1:9001"
+`,
+			wantErr: "trusted_proxies: only supported in l7 mode",
+		},
+		{
 			name: "tls in l4 mode",
 			src: `
 mode: l4
@@ -591,5 +618,35 @@ pools:
 				t.Errorf("error = %q, want it to mention %q", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestParse_TrustedProxies(t *testing.T) {
+	c, err := Parse(strings.NewReader(`
+mode: l7
+listen: ":8080"
+trusted_proxies: ["10.0.0.0/8", "192.0.2.5", "2001:db8::/32"]
+routes:
+  - match: { path_prefix: "/" }
+    pool: default
+pools:
+  default:
+    - addr: "127.0.0.1:9001"
+`))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	cases := map[string]bool{
+		"10.1.2.3":    true,  // inside 10.0.0.0/8
+		"192.0.2.5":   true,  // a bare IP means just that address
+		"192.0.2.6":   false, // ...and not its neighbour
+		"2001:db8::1": true,
+		"8.8.8.8":     false,
+		"not-an-ip":   false,
+	}
+	for ip, want := range cases {
+		if got := c.IsTrustedProxy(ip); got != want {
+			t.Errorf("IsTrustedProxy(%q) = %v, want %v", ip, got, want)
+		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
+	"net/netip"
 	"net/url"
 	"strings"
 	"sync"
@@ -182,8 +183,10 @@ func TestEquivalence_WithReverseProxy(t *testing.T) {
 	our := newL7(t, &config.Config{
 		Mode:   config.ModeL7,
 		Listen: "127.0.0.1:0",
-		Routes: []config.Route{{Match: config.RouteMatch{PathPrefix: "/"}, Pool: "p"}},
-		Pools:  map[string][]config.Backend{"p": {{Addr: backendAddr, Weight: 1}}},
+		// the test client is local; trusting it matches ReverseProxy, which keeps any prior X-Forwarded-For
+		TrustedProxies: []config.CIDR{{Prefix: netip.MustParsePrefix("127.0.0.1/32")}},
+		Routes:         []config.Route{{Match: config.RouteMatch{PathPrefix: "/"}, Pool: "p"}},
+		Pools:          map[string][]config.Backend{"p": {{Addr: backendAddr, Weight: 1}}},
 	})
 	ourURL := "http://" + our.Addr().String()
 

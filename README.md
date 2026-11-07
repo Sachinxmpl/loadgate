@@ -87,6 +87,7 @@ LoadGate is configured by a single YAML file. Top-level fields:
 | `health` | object | active `{ interval 2s, timeout 500ms, rise 2 }`, passive `{ fall 3, cooldown 10s }` | probing/readmission and eviction thresholds |
 | `rate_limit` | object | `0` (unlimited) | `global_rps`, `per_client_rps` |
 | `max_connections` | int | `0` (unlimited) | L4 only (L7 relies on its read/idle timeouts). Connections over the limit are closed immediately. Keep it below ~⅙ of the FD limit (`ulimit -n`) |
+| `trusted_proxies` | list | `[]` (trust no one) | L7 only. IPs/CIDRs of proxies in front of LoadGate; their `X-Forwarded-For` is kept, from anyone else it is replaced by the client's IP |
 | `routes` | list | *required for L7* | `{ match: { path_prefix }, pool }`, longest prefix wins |
 | `pools` | map | *required* | named lists of backends: `{ addr, weight }` (`weight` defaults `1`) |
 

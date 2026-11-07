@@ -23,6 +23,8 @@ health:
     fall: 3
     cooldown: 10s
 
+trusted_proxies: []            # e.g. ["10.0.0.0/8"]; X-Forwarded-For from anyone else is dropped
+
 rate_limit:
   global_rps: 0
   per_client_rps: 0
@@ -34,7 +36,7 @@ routes:
 
 pools:
   web:
-  - addr: "127.0.0.1:9001"
+    - addr: "127.0.0.1:9001"
       weight: 1
     - addr: "127.0.0.1:9002"
       weight: 1
