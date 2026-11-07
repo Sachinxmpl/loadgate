@@ -40,6 +40,9 @@ func (c *Config) Validate() error {
 	if err := c.RateLimit.validate(); err != nil {
 		return err
 	}
+	if c.MaxConnections < 0 {
+		return fmt.Errorf("max_connections: must be 0 (unlimited) or more, got %d", c.MaxConnections)
+	}
 	if err := c.validatePools(); err != nil {
 		return err
 	}
@@ -195,6 +198,9 @@ func (c *Config) validateModeKeys() error {
 	}
 	if c.Mode == ModeL7 && len(c.Routes) == 0 {
 		return errors.New("routes: at least one route is required in l7 mode")
+	}
+	if c.Mode == ModeL7 && c.MaxConnections > 0 {
+		return errors.New("max_connections: only supported in l4 mode (l7 closes idle clients with its read/idle timeouts)")
 	}
 	return nil
 }

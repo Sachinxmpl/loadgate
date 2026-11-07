@@ -25,6 +25,8 @@ rate_limit:
   global_rps: 5000           # 0 = unlimited
   per_client_rps: 100        # 0
 
+max_connections: 0           # 0 = unlimited; extra connections are closed at once
+
 pools:
   default:
     - addr: "127.0.0.1:9001"

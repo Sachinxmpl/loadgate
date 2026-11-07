@@ -61,6 +61,9 @@ type Config struct {
 	Health    Health    `yaml:"health"`
 	RateLimit RateLimit `yaml:"rate_limit"`
 
+	// L4 only. 0 means unlimited. L7 relies on its read/idle timeouts
+	MaxConnections int `yaml:"max_connections"`
+
 	Routes []Route `yaml:"routes"`
 
 	Pools map[string][]Backend `yaml:"pools"`
