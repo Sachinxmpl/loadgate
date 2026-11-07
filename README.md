@@ -16,7 +16,7 @@ LoadGate is a modern L4/L7 reverse proxy and load balancer written in Go.
 - **Two-plane health checking** — passive eviction on real-traffic failures, active probing for readmission. *Fail fast, recover carefully.*
 - **Automatic failover** — L7 retries failed idempotent requests and L4 retries refused connections on another healthy backend.
 - **TLS termination** — HTTPS with hot certificate rotation; swap certs on reload, no restart.
-- **Hot config reload** — `SIGHUP` validate-before-swap: a broken config can never take down a running server.
+- **Hot config reload** — `SIGHUP` validate-before-swap: a broken config can never take down a running server. Changing `mode`, `listen`, or turning TLS on/off is refused; those need a restart.
 - **Rate limiting** — global and per-client token buckets, reject-don't-queue, LRU-bounded.
 - **Observability** — Prometheus metrics on a separate port, provisioned Grafana dashboard, pprof profiling.
 

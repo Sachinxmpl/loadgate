@@ -46,7 +46,7 @@ func restartRequired(old, new *config.Config) error {
 	return nil
 }
 
-// Warn when reload changes a file that needes restart
+// Warn when reload changes a field that is harmless to keep running with
 func warnRestartRequired(old, new *config.Config, log *slog.Logger) {
 	if old.Balancer != new.Balancer {
 		log.Warn("balancer algorithm change needs a restart to take effect", "old", old.Balancer, "new", new.Balancer)
