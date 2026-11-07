@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// minimalConfig sets o1nly the keys that have no default.
+// minimalConfig - sets only the keys that have no default
 const minimalConfig = `
 mode: l4
 listen: "127.0.0.1:8080"
@@ -15,8 +15,6 @@ pools:
     - addr: "127.0.0.1:9001"
 `
 
-// Guards the contract between applyDefaults and Validate: every default must
-// itself be a valid value.
 func TestParse_MinimalConfig(t *testing.T) {
 	c, err := Parse(strings.NewReader(minimalConfig))
 	if err != nil {
@@ -282,6 +280,33 @@ pools:
     - addr: "127.0.0.1:9001"
 `,
 			wantErr: "timeouts.dial",
+		},
+		{
+			name: "negative max_connections",
+			src: `
+mode: l4
+listen: ":8080"
+max_connections: -1
+pools:
+  default:
+    - addr: "127.0.0.1:9001"
+`,
+			wantErr: "max_connections",
+		},
+		{
+			name: "max_connections in l7 mode",
+			src: `
+mode: l7
+listen: ":8080"
+max_connections: 100
+routes:
+  - match: { path_prefix: "/" }
+    pool: default
+pools:
+  default:
+    - addr: "127.0.0.1:9001"
+`,
+			wantErr: "max_connections: only supported in l4 mode",
 		},
 		{
 			name: "tls in l4 mode",
