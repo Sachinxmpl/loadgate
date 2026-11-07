@@ -30,9 +30,10 @@ func newL7(t *testing.T, cfg *config.Config) *Server {
 	}
 	reg := health.NewRegistry()
 	reg.Reconcile(cfg.BackendAddrs())
-	bal, _ := balancer.New(config.AlgRoundRobin, reg)
 
-	s := New(Options{Config: cfg, Store: config.NewStore(cfg), Balancer: bal, Registry: reg, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	bals, _ := balancer.NewPools(config.AlgRoundRobin, reg)
+
+	s := New(Options{Config: cfg, Store: config.NewStore(cfg), Balancers: bals, Registry: reg, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 
 	if err := s.Start(); err != nil {
 		t.Fatalf("Start: %v", err)

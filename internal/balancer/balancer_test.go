@@ -302,3 +302,22 @@ func TestConsistentHash_Distribution(t *testing.T) {
 		t.Logf("vnodes=%d: max deviation from even = %.1f%%", vnodes, maxDev*100)
 	}
 }
+
+func TestPools_OneBalancerPerPool(t *testing.T) {
+	p, err := NewPools(config.AlgRoundRobin, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.For("a") != p.For("a") {
+		t.Error("same pool name returned different balancers")
+	}
+	if p.For("a") == p.For("b") {
+		t.Error("different pools share one balancer")
+	}
+}
+
+func TestNewPools_RejectsUnknownAlgorithm(t *testing.T) {
+	if _, err := NewPools("nope", nil); err == nil {
+		t.Error("want error for unknown algorithm")
+	}
+}
