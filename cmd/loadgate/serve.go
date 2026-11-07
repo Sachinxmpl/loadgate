@@ -78,12 +78,6 @@ func Serve(args []string) error {
 		}
 	}
 
-	balancer, err := balancer.New(cfg.Balancer, registry)
-	if err != nil {
-		log.Error("failed to create balancer", "algorithm", cfg.Balancer, "err", err)
-		return err
-	}
-
 	mgr := health.NewManager(registry, cfg.Health, log, mtrs.HealthTransition)
 	mgr.Sync(added, nil)
 	defer mgr.Stop()
@@ -108,9 +102,20 @@ func Serve(args []string) error {
 	var srv server
 	switch cfg.Mode {
 	case config.ModeL4:
-		srv = listener.New(listener.Options{Addr: cfg.Listen, Store: store, Balancer: balancer, Registry: registry, Limiter: limiter, Log: log, Metrics: mtrs})
+		bal, err := balancer.New(cfg.Balancer, registry)
+		if err != nil {
+			log.Error("failed to create balancer", "algorithm", cfg.Balancer, "err", err)
+			return err
+		}
+		srv = listener.New(listener.Options{Addr: cfg.Listen, Store: store, Balancer: bal, Registry: registry, Limiter: limiter, Log: log, Metrics: mtrs})
 	case config.ModeL7:
-		srv = l7.New(l7.Options{Config: cfg, Store: store, Balancer: balancer, Registry: registry, Limiter: limiter, Log: log, Metrics: mtrs})
+		// one balancer per pool, so pools never share round-robin or hash state
+		bals, err := balancer.NewPools(cfg.Balancer, registry)
+		if err != nil {
+			log.Error("failed to create balancer", "algorithm", cfg.Balancer, "err", err)
+			return err
+		}
+		srv = l7.New(l7.Options{Config: cfg, Store: store, Balancers: bals, Registry: registry, Limiter: limiter, Log: log, Metrics: mtrs})
 	}
 
 	if err := srv.Start(); err != nil {

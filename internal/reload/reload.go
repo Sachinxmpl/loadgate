@@ -1,6 +1,8 @@
 package reload
 
 import (
+	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/Sachinxmpl/loadgate/internal/config"
@@ -15,6 +17,9 @@ func Apply(path string, store *config.Store, reg *health.Registry, mgr *health.M
 		return err
 	}
 	old := store.Load()
+	if err := restartRequired(old, newCfg); err != nil {
+		return err
+	}
 	warnRestartRequired(old, newCfg, log)
 
 	// atomic swatp
@@ -28,14 +33,21 @@ func Apply(path string, store *config.Store, reg *health.Registry, mgr *health.M
 	return nil
 }
 
-// Warn when reload changes a filed that needes restart
-func warnRestartRequired(old, new *config.Config, log *slog.Logger) {
+func restartRequired(old, new *config.Config) error {
 	if old.Mode != new.Mode {
-		log.Warn("mode change needs a restart to take effect", "old", old.Mode, "new", new.Mode)
+		return fmt.Errorf("mode: changing %q to %q needs a restart", old.Mode, new.Mode)
 	}
 	if old.Listen != new.Listen {
-		log.Warn("listen address change needs a restart to take effect", "old", old.Listen, "new", new.Listen)
+		return fmt.Errorf("listen: changing %q to %q needs a restart", old.Listen, new.Listen)
 	}
+	if (old.TLS == nil) != (new.TLS == nil) {
+		return errors.New("tls: turning TLS on or off needs a restart")
+	}
+	return nil
+}
+
+// Warn when reload changes a field that is harmless to keep running with
+func warnRestartRequired(old, new *config.Config, log *slog.Logger) {
 	if old.Balancer != new.Balancer {
 		log.Warn("balancer algorithm change needs a restart to take effect", "old", old.Balancer, "new", new.Balancer)
 	}

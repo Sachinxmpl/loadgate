@@ -34,7 +34,7 @@ routes:
 
 pools:
   web:
-    - addr: "127.0.0.1:9001"
+  - addr: "127.0.0.1:9001"
       weight: 1
     - addr: "127.0.0.1:9002"
       weight: 1

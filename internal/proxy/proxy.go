@@ -37,8 +37,11 @@ func L4(client, backend net.Conn, drainTimeout time.Duration) {
 
 		// first direction to finish sets readline for other
 		once.Do(func() {
-			// bound the other directon (its source is this goroutine's dst)
-			dst.SetReadDeadline(time.Now().Add(drainTimeout))
+			// Other direction reads from dst and writes to src
+			// both bounded
+			d := time.Now().Add(drainTimeout)
+			dst.SetReadDeadline(d)
+			src.SetWriteDeadline(d)
 		})
 	}
 
