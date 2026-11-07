@@ -40,6 +40,9 @@ func (c *Config) Validate() error {
 	if err := c.RateLimit.validate(); err != nil {
 		return err
 	}
+	if c.MaxConnections < 0 {
+		return fmt.Errorf("max_connections: must be 0 (unlimited) or more, got %d", c.MaxConnections)
+	}
 	if err := c.validatePools(); err != nil {
 		return err
 	}
@@ -189,12 +192,18 @@ func (c *Config) validateModeKeys() error {
 		if c.TLS != nil {
 			return errors.New("tls: not allowed in l4 mode (TLS termination requires l7)")
 		}
+		if len(c.TrustedProxies) > 0 {
+			return errors.New("trusted_proxies: only supported in l7 mode (l4 does not read headers)")
+		}
 		if len(c.Pools) != 1 {
 			return fmt.Errorf("pools: l4 mode requires exactly one pool, got %d", len(c.Pools))
 		}
 	}
 	if c.Mode == ModeL7 && len(c.Routes) == 0 {
 		return errors.New("routes: at least one route is required in l7 mode")
+	}
+	if c.Mode == ModeL7 && c.MaxConnections > 0 {
+		return errors.New("max_connections: only supported in l4 mode (l7 closes idle clients with its read/idle timeouts)")
 	}
 	return nil
 }

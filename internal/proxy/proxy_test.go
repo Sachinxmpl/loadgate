@@ -132,3 +132,35 @@ func TestL4_SlientBackendHitsDrainDeadline(t *testing.T) {
 
 	clientTest.Close()
 }
+
+// Slow-reader test
+func TestL4_NonReadingClientHitsDrainDeadline(t *testing.T) {
+	clientProxy, clientTest := tcpPair(t)
+	backendProxy, backendTest := tcpPair(t)
+	defer clientTest.Close()
+
+	done := make(chan struct{})
+	go func() {
+		L4(clientProxy, backendProxy, 200*time.Millisecond)
+		close(done)
+	}()
+
+	// fake backend: floods the client with 64MB, which it never reads
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer backendTest.Close()
+		backendTest.Write(make([]byte, 64<<20))
+	}()
+
+	clientTest.Write([]byte("send me everything\n"))
+	clientTest.(*net.TCPConn).CloseWrite()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("L4 did not return: blocked writing to a client that never reads")
+	}
+	wg.Wait()
+}

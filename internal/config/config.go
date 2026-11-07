@@ -3,7 +3,9 @@ package config
 import (
 	"crypto/tls"
 	"fmt"
+	"net/netip"
 	"sort"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -51,6 +53,32 @@ func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
+// CIDR is an IP range from the config, written as "10.0.0.0/8" or as a bare IP ("192.0.2.5"), which means just that one address
+type CIDR struct {
+	netip.Prefix
+}
+
+func (c *CIDR) UnmarshalYAML(node *yaml.Node) error {
+	var s string
+	if err := node.Decode(&s); err != nil {
+		return fmt.Errorf("must be a string such as %q: %w", "10.0.0.0/8", err)
+	}
+	if !strings.Contains(s, "/") {
+		addr, err := netip.ParseAddr(s)
+		if err != nil {
+			return fmt.Errorf("invalid IP %q", s)
+		}
+		c.Prefix = netip.PrefixFrom(addr, addr.BitLen())
+		return nil
+	}
+	p, err := netip.ParsePrefix(s)
+	if err != nil {
+		return fmt.Errorf("invalid CIDR %q", s)
+	}
+	c.Prefix = p.Masked()
+	return nil
+}
+
 // Whole configuration
 type Config struct {
 	Mode      Mode      `yaml:"mode"`
@@ -60,6 +88,12 @@ type Config struct {
 	Timeouts  Timeouts  `yaml:"timeouts"`
 	Health    Health    `yaml:"health"`
 	RateLimit RateLimit `yaml:"rate_limit"`
+
+	// L4 only. 0 means unlimited. L7 relies on its read/idle timeouts
+	MaxConnections int `yaml:"max_connections"`
+
+	// L7 only. Empty = trust no one
+	TrustedProxies []CIDR `yaml:"trusted_proxies"`
 
 	Routes []Route `yaml:"routes"`
 
@@ -157,4 +191,19 @@ func (c *Config) BackendAddrs() []string {
 	}
 
 	return addrs
+}
+
+// IsTrustedProxy reports whether ip is inside one of trusted_proxies
+func (c *Config) IsTrustedProxy(ip string) bool {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return false
+	}
+	addr = addr.Unmap()
+	for _, p := range c.TrustedProxies {
+		if p.Contains(addr) {
+			return true
+		}
+	}
+	return false
 }

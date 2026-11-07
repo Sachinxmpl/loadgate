@@ -18,6 +18,11 @@ import (
 	"github.com/Sachinxmpl/loadgate/internal/ratelimit"
 )
 
+var (
+	errShuttingDown = errors.New("shutting down")
+	errTooManyConns = errors.New("max_connections reached")
+)
+
 const (
 	acceptBackOffMin = 5 * time.Millisecond
 	acceptBackOfMax  = time.Second
@@ -107,7 +112,7 @@ func (s *Server) acceptLoop() {
 				return
 			}
 
-			// anything else -> process most liekly out of file descriptors, try exponentially
+			// anything else -> process most likely out of file descriptors, try exponentially
 			s.log.Warn("accept failed, retrying", "err", err, "backoff", backoff)
 			time.Sleep(backoff)
 			backoff = min(backoff*2, acceptBackOfMax)
@@ -116,7 +121,12 @@ func (s *Server) acceptLoop() {
 		backoff = acceptBackOffMin
 
 		// Shutdown may have started between accept returning and here,
-		if !s.track(conn) {
+		// or max_connections may already be open
+		if err := s.track(conn); err != nil {
+			if errors.Is(err, errTooManyConns) {
+				s.metrics.ConnLimitRejected()
+				s.log.Debug("connection refused", "client", conn.RemoteAddr().String(), "err", err)
+			}
 			conn.Close()
 			continue
 		}
@@ -131,16 +141,22 @@ func (s *Server) acceptLoop() {
 	}
 }
 
-// register conn as live, reports false if shutdown has already begun (caller must conn itself)
-func (s *Server) track(conn net.Conn) bool {
+// register conn as live. Returns an error if shutdown has already begun or
+// max_connections are already open (caller must close conn itself)
+func (s *Server) track(conn net.Conn) error {
+	limit := s.store.Load().MaxConnections
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.shutdown {
-		return false
+		return errShuttingDown
+	}
+	if limit > 0 && len(s.conns) >= limit {
+		return errTooManyConns
 	}
 	s.conns[conn] = struct{}{}
-	return true
+	return nil
 }
 
 func (s *Server) untrack(conn net.Conn) {

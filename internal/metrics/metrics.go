@@ -13,6 +13,7 @@ type Metrics struct {
 	transitions *prometheus.CounterVec
 	rejections  prometheus.Counter
 	reloads     *prometheus.CounterVec
+	connLimit   prometheus.Counter
 }
 
 func New(src StateSource) *Metrics {
@@ -62,9 +63,15 @@ func New(src StateSource) *Metrics {
 			},
 			[]string{"results"},
 		),
+		connLimit: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Name: "loadgate_connection_limit_rejections_total",
+				Help: "L4 connections refused because max_connections were open",
+			},
+		),
 	}
 
-	reg.MustRegister(m.requests, m.duration, m.transitions, m.rejections, m.reloads)
+	reg.MustRegister(m.requests, m.duration, m.transitions, m.rejections, m.reloads, m.connLimit)
 
 	reg.MustRegister(NewStateCollector(src))
 
@@ -117,6 +124,13 @@ func (m *Metrics) ReloadResult(ok bool) {
 		result = "error"
 	}
 	m.reloads.WithLabelValues(result).Inc()
+}
+
+func (m *Metrics) ConnLimitRejected() {
+	if m == nil {
+		return
+	}
+	m.connLimit.Inc()
 }
 
 func (m *Metrics) Registry() *prometheus.Registry {

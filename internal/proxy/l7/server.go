@@ -26,12 +26,12 @@ const (
 )
 
 type Server struct {
-	addr     string
-	store    *config.Store
-	balancer balancer.Balancer
-	registry *health.Registry
-	log      *slog.Logger
-	limiter  *ratelimit.Limiter
+	addr      string
+	store     *config.Store
+	balancers *balancer.Pools
+	registry  *health.Registry
+	log       *slog.Logger
+	limiter   *ratelimit.Limiter
 
 	httpSrv *http.Server
 	ln      net.Listener
@@ -41,24 +41,24 @@ type Server struct {
 }
 
 type Options struct {
-	Config   *config.Config
-	Store    *config.Store
-	Balancer balancer.Balancer
-	Registry *health.Registry
-	Limiter  *ratelimit.Limiter
-	Log      *slog.Logger
-	Metrics  *metrics.Metrics
+	Config    *config.Config
+	Store     *config.Store
+	Balancers *balancer.Pools
+	Registry  *health.Registry
+	Limiter   *ratelimit.Limiter
+	Log       *slog.Logger
+	Metrics   *metrics.Metrics
 }
 
 func New(o Options) *Server {
 	s := &Server{
-		addr:     o.Config.Listen,
-		store:    o.Store,
-		balancer: o.Balancer,
-		registry: o.Registry,
-		limiter:  o.Limiter,
-		log:      o.Log,
-		metrics:  o.Metrics,
+		addr:      o.Config.Listen,
+		store:     o.Store,
+		balancers: o.Balancers,
+		registry:  o.Registry,
+		limiter:   o.Limiter,
+		log:       o.Log,
+		metrics:   o.Metrics,
 	}
 
 	s.httpSrv = &http.Server{
@@ -156,7 +156,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		pool := balancer.Untried(balancer.HealthyBackends(cfg.Pools[poolName], s.registry), tried)
 
-		backend, err := s.balancer.Pick(clientIP(r), pool)
+		backend, err := s.balancers.For(poolName).Pick(clientIP(r), pool)
 		if err != nil {
 			status := http.StatusServiceUnavailable
 			if len(tried) > 0 {
@@ -197,7 +197,8 @@ func (s *Server) forwardOnce(w http.ResponseWriter, r *http.Request, cfg *config
 	out.Host = r.Host
 
 	stripHopByHop(out.Header)
-	appendXForwardedFor(out, clientIP(r))
+	ip := clientIP(r)
+	setXForwardedFor(out, ip, cfg.IsTrustedProxy(ip))
 
 	resp, err := s.transport.RoundTrip(out)
 	if err != nil {
@@ -231,7 +232,7 @@ func (s *Server) forwardOnce(w http.ResponseWriter, r *http.Request, cfg *config
 }
 
 // Copies the backend's body to the client.
-// When stream is true the boday has no known length (SSE, chunked), so each piece is flushed to the client as soon as it arrives
+// When stream is true the body has no known length (SSE, chunked), so each piece is flushed to the client as soon as it arrives
 func copyBody(w http.ResponseWriter, body io.Reader, stream bool) error {
 	if !stream {
 		_, err := io.Copy(w, body)
@@ -318,15 +319,22 @@ func stripHopByHop(h http.Header) {
 	}
 }
 
-// appends clientIP to the reques'ts forwarding trail, preserves addresses of any earlier hops
-func appendXForwardedFor(out *http.Request, clientIP string) {
-	if clientIP == "" {
-		return
+// sets X-Forwarded-For to the forwarding chain plus clientIP.
+// The incoming chain (from every X-Forwarded-For line) is kept only when the direct peer
+// is a trusted proxy; from anyone else it could be made up, so it is dropped
+func setXForwardedFor(out *http.Request, clientIP string, trusted bool) {
+	var chain []string
+	if trusted {
+		chain = append(chain, out.Header.Values("X-Forwarded-For")...)
 	}
-	if prior := out.Header.Get("X-Forwarded-For"); prior != "" {
-		clientIP = prior + ", " + clientIP
+	if clientIP != "" {
+		chain = append(chain, clientIP)
 	}
-	out.Header.Set("X-Forwarded-For", clientIP)
+
+	out.Header.Del("X-Forwarded-For")
+	if len(chain) > 0 {
+		out.Header.Set("X-Forwarded-For", strings.Join(chain, ", "))
+	}
 }
 
 // Copies every header value from src to desk
