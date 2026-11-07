@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -275,5 +276,51 @@ func TestServeHTTP_StreamsWithoutBuffering(t *testing.T) {
 	}
 	if line != "data: first\n" {
 		t.Errorf("first line = %q, want %q", line, "data: first\n")
+	}
+}
+
+func TestServeHTTP_EachPoolBalancesIndependently(t *testing.T) {
+	var mu sync.Mutex
+	hits := map[string]int{}
+	counting := func(name string) *httptest.Server {
+		be := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			hits[name]++
+			mu.Unlock()
+		}))
+		t.Cleanup(be.Close)
+		return be
+	}
+
+	addr := func(be *httptest.Server) string {
+		return strings.TrimPrefix(be.URL, "http://")
+	}
+
+	a1, a2, b1, b2 := counting("a1"), counting("a2"), counting("b1"), counting("b2")
+
+	cfg := &config.Config{
+		Mode:   config.ModeL7,
+		Listen: "127.0.0.1:0",
+		Routes: []config.Route{
+			{Match: config.RouteMatch{PathPrefix: "/a"}, Pool: "a"},
+			{Match: config.RouteMatch{PathPrefix: "/b"}, Pool: "b"},
+		},
+		Pools: map[string][]config.Backend{
+			"a": {{Addr: addr(a1), Weight: 1}, {Addr: addr(a2), Weight: 1}},
+			"b": {{Addr: addr(b1), Weight: 1}, {Addr: addr(b2), Weight: 1}},
+		},
+	}
+
+	s := newL7(t, cfg)
+
+	for i := 0; i < 10; i++ {
+		get(t, s, "/a")
+		get(t, s, "/b")
+	}
+
+	for _, name := range []string{"a1", "a2", "b1", "b2"} {
+		if hits[name] != 5 {
+			t.Errorf("%s got %d requests, want 5 (hits: %v)", name, hits[name], hits)
+		}
 	}
 }
