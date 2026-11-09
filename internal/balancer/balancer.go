@@ -53,7 +53,7 @@ func Untried(pool []config.Backend, tried map[string]bool) []config.Backend {
 	return out
 }
 
-// Returns the backends in pool that are healthy, if none are healthy, it returns whe whole pool (fail open)
+// Returns the backends in pool that are healthy, if none are healthy, it returns the whole pool (fail open)
 func HealthyBackends(pool []config.Backend, reg *health.Registry) []config.Backend {
 	out := make([]config.Backend, 0, len(pool))
 	for _, b := range pool {

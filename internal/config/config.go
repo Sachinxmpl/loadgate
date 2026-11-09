@@ -131,7 +131,7 @@ type ActiveHealth struct {
 	// Empty -> only check TCP connect succeeds
 	Path string `yaml:"path"`
 
-	// Failed proes in a row that evict a healthy backend
+	// Failed probes in a row that evict a healthy backend
 	// 0 -> probes never evict a backend, only passive health does
 	Fall int `yaml:"fall"`
 }

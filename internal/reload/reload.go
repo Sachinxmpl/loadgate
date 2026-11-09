@@ -43,6 +43,9 @@ func restartRequired(old, new *config.Config) error {
 	if (old.TLS == nil) != (new.TLS == nil) {
 		return errors.New("tls: turning TLS on or off needs a restart")
 	}
+	if old.Health != new.Health {
+		return errors.New("health: changing health settings needs a restart")
+	}
 	return nil
 }
 
@@ -50,8 +53,5 @@ func restartRequired(old, new *config.Config) error {
 func warnRestartRequired(old, new *config.Config, log *slog.Logger) {
 	if old.Balancer != new.Balancer {
 		log.Warn("balancer algorithm change needs a restart to take effect", "old", old.Balancer, "new", new.Balancer)
-	}
-	if old.Health != new.Health {
-		log.Warn("health settings change needs a restart to take effect")
 	}
 }
