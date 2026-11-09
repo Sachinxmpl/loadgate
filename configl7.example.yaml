@@ -19,6 +19,7 @@ health:
     interval: 2s
     timeout: 500ms
     rise: 2
+    path: /health
   passive:
     fall: 3
     cooldown: 10s

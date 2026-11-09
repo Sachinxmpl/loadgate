@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"net"
+	"net/http"
 	"sync"
 	"time"
 
@@ -23,6 +24,10 @@ type Manager struct {
 	rise     int
 	cooldown time.Duration
 
+	// HTTP probe; path == "" means TCP-connect probe only
+	path   string
+	client *http.Client
+
 	// Is called whenever a probe moves a backend to a new phase
 	// Wired to metrics in server.go
 	onTransition func(addr, phase string)
@@ -35,12 +40,19 @@ type Manager struct {
 
 func NewManager(reg *Registry, h config.Health, log *slog.Logger, onTransition func(addr, phase string)) *Manager {
 	return &Manager{
-		reg:          reg,
-		log:          log,
-		interval:     h.Active.Interval.Std(),
-		timeout:      h.Active.Timeout.Std(),
-		rise:         h.Active.Rise,
-		cooldown:     h.Passive.Cooldown.Std(),
+		reg:      reg,
+		log:      log,
+		interval: h.Active.Interval.Std(),
+		timeout:  h.Active.Timeout.Std(),
+		rise:     h.Active.Rise,
+		cooldown: h.Passive.Cooldown.Std(),
+		path:     h.Active.Path,
+		client: &http.Client{
+			Transport: &http.Transport{DisableKeepAlives: true},
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 		onTransition: onTransition,
 		cancels:      make(map[string]context.CancelFunc),
 	}
@@ -119,13 +131,35 @@ func (m *Manager) probeOnce(ctx context.Context, addr string) bool {
 	ctx, cancel := context.WithTimeout(ctx, m.timeout)
 	defer cancel()
 
+	if m.path == "" {
+		return tcpProbe(ctx, addr)
+	}
+	return m.httpProbe(ctx, addr)
+}
+
+func tcpProbe(ctx context.Context, addr string) bool {
 	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return false
 	}
-
 	conn.Close()
 	return true
+}
+
+// passes if GET http://addr<path> answers 2xx
+func (m *Manager) httpProbe(ctx context.Context, addr string) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+m.path, nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("User-Agent", "loadgate-health")
+
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode >= 200 && resp.StatusCode < 300
 }
 
 // returns d with +- 10%, so all probers don't start together

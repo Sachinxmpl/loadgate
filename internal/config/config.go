@@ -126,6 +126,10 @@ type ActiveHealth struct {
 	Interval Duration `yaml:"interval"`
 	Timeout  Duration `yaml:"timeout"`
 	Rise     int      `yaml:"rise"`
+
+	// HTTP path to GET, eg "/health", a 2xx is a pass
+	// Empty -> only check TCP connect succeeds
+	Path string `yaml:"path"`
 }
 
 type PassiveHealth struct {
