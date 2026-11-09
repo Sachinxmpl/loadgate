@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strings"
 )
 
 func (c *Config) Validate() error {
@@ -110,6 +111,12 @@ func (h Health) validate() error {
 	if h.Active.Timeout >= h.Active.Interval {
 		return fmt.Errorf("health.active.timeout: must be less than health.active.interval (%v), got %v",
 			h.Active.Interval, h.Active.Timeout)
+	}
+	if h.Active.Path != "" && !strings.HasPrefix(h.Active.Path, "/") {
+		return fmt.Errorf("health.active.path: must start with \"/\", got %q", h.Active.Path)
+	}
+	if h.Active.Fall < 0 {
+		return fmt.Errorf("health.active.fall: must be 0 (probes only readmit) or more, got %d", h.Active.Fall)
 	}
 	if h.Active.Rise < 1 {
 		return fmt.Errorf("health.active.rise: must be at least 1, got %d", h.Active.Rise)

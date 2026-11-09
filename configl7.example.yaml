@@ -19,9 +19,12 @@ health:
     interval: 2s
     timeout: 500ms
     rise: 2
+    path: /health    # GET must answer 2xx; remove for a TCP-only check
+    fall: 3          # failed probes in a row that evict a healthy backend; 0 = probes only readmit
   passive:
     fall: 3
     cooldown: 10s
+    fail_on_5xx: false         # false = ignore 5xx for passive fall; true = count them
 
 trusted_proxies: []            # e.g. ["10.0.0.0/8"]; X-Forwarded-For from anyone else is dropped
 

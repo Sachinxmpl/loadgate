@@ -33,6 +33,7 @@ func TestRestartRequired(t *testing.T) {
 		{"tls removed", func(c *config.Config) { c.TLS = nil }, "tls"},
 		{"cert rotated", func(c *config.Config) { c.TLS = &config.TLS{Cert: "b.crt", Key: "b.key"} }, ""},
 		{"balancer changed", func(c *config.Config) { c.Balancer = config.AlgLeastConns }, ""},
+		{"health changed", func(c *config.Config) { c.Health.Active.Path = "/healthz" }, "health"},
 	}
 
 	for _, tt := range tests {

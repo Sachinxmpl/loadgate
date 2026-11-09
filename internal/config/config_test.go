@@ -336,6 +336,34 @@ pools:
 			wantErr: "trusted_proxies: only supported in l7 mode",
 		},
 		{
+			name: "health path without leading slash",
+			src: `
+mode: l4
+listen: ":8080"
+health:
+  active:
+    path: "health"
+pools:
+  default:
+    - addr: "127.0.0.1:9001"
+`,
+			wantErr: "health.active.path",
+		},
+		{
+			name: "negative active fall",
+			src: `
+mode: l4
+listen: ":8080"
+health:
+  active:
+    fall: -1
+pools:
+  default:
+    - addr: "127.0.0.1:9001"
+`,
+			wantErr: "health.active.fall",
+		},
+		{
 			name: "tls in l4 mode",
 			src: `
 mode: l4

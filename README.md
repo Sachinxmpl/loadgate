@@ -13,7 +13,8 @@ LoadGate is a modern L4/L7 reverse proxy and load balancer written in Go.
 
 - **L4 and L7 modes** — raw TCP relay or full HTTP(S) reverse proxy, selected per instance.
 - **Four algorithms** — round-robin, smooth weighted round-robin, least-connections, and consistent hashing (150 vnodes).
-- **Two-plane health checking** — passive eviction on real-traffic failures, active probing for readmission. *Fail fast, recover carefully.*
+- **Two-plane health checking** — passive eviction on real-traffic failures, active probing for readmission (and, with `health.active.fall`, eviction of backends that fail their probes).
+- **Fail-open** — if every backend in a pool is evicted, traffic is sent to all of them anyway instead of refusing everyone; a backend that has recovered serves at once, before the prober readmits it.
 - **Automatic failover** — L7 retries failed idempotent requests and L4 retries refused connections on another healthy backend.
 - **TLS termination** — HTTPS with hot certificate rotation; swap certs on reload, no restart.
 - **Hot config reload** — `SIGHUP` validate-before-swap: a broken config can never take down a running server. Changing `mode`, `listen`, or turning TLS on/off is refused; those need a restart.
@@ -84,7 +85,7 @@ LoadGate is configured by a single YAML file. Top-level fields:
 | `balancer` | string | `round_robin` | `round_robin`, `weighted_round_robin`, `least_connections`, or `consistent_hash` |
 | `tls` | object | *disabled* | L7 only. `{ cert, key }` paths; presence enables HTTPS |
 | `timeouts` | object | dial `2s`, read/write/request `30s`, response_header `10s`, idle `60s`, drain `15s` | connection and request deadlines (L4 uses only `dial` and `drain`) |
-| `health` | object | active `{ interval 2s, timeout 500ms, rise 2 }`, passive `{ fall 3, cooldown 10s }` | probing/readmission and eviction thresholds |
+| `health` | object | active `{ interval 2s, timeout 500ms, rise 2, path "", fall 0 }`, passive `{ fall 3, cooldown 10s, fail_on_5xx false }` | probing/readmission and eviction thresholds. `active.path` (e.g. `/health`) makes the probe an HTTP GET that must answer 2xx; empty = TCP connect only. In L7 mode, setting `passive.fail_on_5xx: true` counts upstream 5xx responses toward passive `fall`. |
 | `rate_limit` | object | `0` (unlimited) | `global_rps`, `per_client_rps` |
 | `max_connections` | int | `0` (unlimited) | L4 only (L7 relies on its read/idle timeouts). Connections over the limit are closed immediately. Keep it below ~⅙ of the FD limit (`ulimit -n`) |
 | `trusted_proxies` | list | `[]` (trust no one) | L7 only. IPs/CIDRs of proxies in front of LoadGate; their `X-Forwarded-For` is kept, from anyone else it is replaced by the client's IP |

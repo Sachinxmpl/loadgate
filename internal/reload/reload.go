@@ -43,6 +43,9 @@ func restartRequired(old, new *config.Config) error {
 	if (old.TLS == nil) != (new.TLS == nil) {
 		return errors.New("tls: turning TLS on or off needs a restart")
 	}
+	if old.Health != new.Health {
+		return errors.New("health: changing health settings needs a restart")
+	}
 	return nil
 }
 

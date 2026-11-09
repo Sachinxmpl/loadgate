@@ -4,6 +4,10 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -91,6 +95,88 @@ func TestManager_DoesNotReadmitDeadBackend(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	if st.Admits() {
 		t.Errorf("dead backend was readmitted; phase = %v", st.Phase())
+	}
+}
+
+// With health.active.path set, an evicted backend whose port is open but health endpoint answers 503 stays out
+// Only 2xx answers are readmitted
+func TestManager_HTTPProbeChecksStatus(t *testing.T) {
+	var healthy atomic.Bool
+	be := httptest.NewServer(
+		http.HandlerFunc(
+			func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/health" {
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+				if !healthy.Load() {
+					w.WriteHeader(http.StatusServiceUnavailable)
+				}
+			},
+		),
+	)
+	defer be.Close()
+	addr := strings.TrimPrefix(be.URL, "http://")
+
+	reg := NewRegistry()
+	added, _ := reg.Reconcile([]string{addr})
+
+	h := testHealth(20*time.Millisecond, 100*time.Millisecond, 40*time.Millisecond, 2, 3)
+	h.Active.Path = "/health"
+	mgr := NewManager(reg, h, discardLog(), nil)
+	mgr.Sync(added, nil)
+	defer mgr.Stop()
+
+	st := reg.Get(addr)
+	for i := 0; i < 3; i++ {
+		st.ReportFailure(3)
+	}
+
+	// port open, /health says 503, must stay evicted
+	time.Sleep(300 * time.Millisecond)
+	if st.Admits() {
+		t.Fatalf("backend answering 503 on /health was readmitted; phase = %v", st.Phase())
+	}
+
+	// /health recovers, must come back
+	healthy.Store(true)
+	if !waitFor(2*time.Second, st.Admits) {
+		t.Fatalf("backend answering 200 on /health was not readmitted; phase = %v", st.Phase())
+	}
+
+}
+
+// With health.active.fall set, a backend that is Healthy (no passive failures at all) is evicted by the prober when /health starts failing, and readmitted when it recovers
+func TestManager_ActiveFallEvictsHealthyBackend(t *testing.T) {
+	var healthy atomic.Bool
+	healthy.Store(true)
+	be := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !healthy.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}))
+	defer be.Close()
+	addr := strings.TrimPrefix(be.URL, "http://")
+
+	reg := NewRegistry()
+	added, _ := reg.Reconcile([]string{addr})
+	h := testHealth(20*time.Millisecond, 100*time.Millisecond, 40*time.Millisecond, 2, 3)
+	h.Active.Path = "/health"
+	h.Active.Fall = 2
+	mgr := NewManager(reg, h, discardLog(), nil)
+	mgr.Sync(added, nil)
+	defer mgr.Stop()
+
+	st := reg.Get(addr)
+
+	healthy.Store(false)
+	if !waitFor(time.Second, func() bool { return !st.Admits() }) {
+		t.Fatalf("healthy backend whose /health fails was not evicted; phase = %v", st.Phase())
+	}
+
+	healthy.Store(true)
+	if !waitFor(2*time.Second, st.Admits) {
+		t.Fatalf("backend was not readmitted after /health recovered; phase = %v", st.Phase())
 	}
 }
 

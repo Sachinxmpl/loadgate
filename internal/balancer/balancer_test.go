@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Sachinxmpl/loadgate/internal/config"
+	"github.com/Sachinxmpl/loadgate/internal/health"
 	"go.uber.org/goleak"
 )
 
@@ -319,5 +320,23 @@ func TestPools_OneBalancerPerPool(t *testing.T) {
 func TestNewPools_RejectsUnknownAlgorithm(t *testing.T) {
 	if _, err := NewPools("nope", nil); err == nil {
 		t.Error("want error for unknown algorithm")
+	}
+}
+
+// Only healthy backends are offered while at least one is healthy. When none is, the whole pool is offered (fail-open) instead of nothing
+func TestHealthyBackends_FailsOpenWhenNoneHealthy(t *testing.T) {
+	pool := testPool(3)
+	reg := health.NewRegistry()
+	reg.Reconcile([]string{"a", "b", "c"})
+
+	reg.Get("a").ReportFailure(1)
+	reg.Get("b").ReportFailure(1)
+	if got := HealthyBackends(pool, reg); len(got) != 1 || got[0].Addr != "c" {
+		t.Fatalf("with only c healthy got %v, want just c", got)
+	}
+
+	reg.Get("c").ReportFailure(1)
+	if got := HealthyBackends(pool, reg); len(got) != 3 {
+		t.Fatalf("with none healthy got %d backends, want all 3 (fail-open)", len(got))
 	}
 }

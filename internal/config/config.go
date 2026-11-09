@@ -126,11 +126,22 @@ type ActiveHealth struct {
 	Interval Duration `yaml:"interval"`
 	Timeout  Duration `yaml:"timeout"`
 	Rise     int      `yaml:"rise"`
+
+	// HTTP path to GET, eg "/health", a 2xx is a pass
+	// Empty -> only check TCP connect succeeds
+	Path string `yaml:"path"`
+
+	// Failed probes in a row that evict a healthy backend
+	// 0 -> probes never evict a backend, only passive health does
+	Fall int `yaml:"fall"`
 }
 
 type PassiveHealth struct {
 	Fall     int      `yaml:"fall"`
 	Cooldown Duration `yaml:"cooldown"`
+
+	// l7 only, count 5xx responses as failures for passive health
+	FailOn5xx bool `yaml:"fail_on_5xx"`
 }
 
 type RateLimit struct {
