@@ -354,3 +354,25 @@ func TestServeHTTP_EachPoolBalancesIndependently(t *testing.T) {
 		}
 	}
 }
+
+// When every backend in the pool is evicted, requests are still sent to them (fail-open) instead of a 503, so a backend that has already recovered answers straight away
+func TestServeHTTP_AllEvictedFailsOpen(t *testing.T) {
+	var got http.Request
+	be := recordingBackend(t, &got)
+	t.Cleanup(be.Close)
+
+	s := newL7(t, singlePoolL7(be))
+
+	// evicted, although it is actually alive
+	st := s.registry.Get(strings.TrimPrefix(be.URL, "http://"))
+	st.ReportFailure(1)
+	if st.Admits() {
+		t.Fatal("setup: backend should be evicted")
+	}
+
+	resp := mustGet(t, s, "/")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200 from the evicted but alive backend (fail-open)", resp.StatusCode)
+	}
+}
