@@ -33,10 +33,11 @@ func (p Phase) String() string {
 type State struct {
 	phase atomic.Int32
 
-	mu        sync.Mutex
-	fails     int
-	successes int
-	evictedAt time.Time
+	mu         sync.Mutex
+	fails      int // passive: real-traffic failures in a row
+	probeFails int // active: failed probes in a row while healthy
+	successes  int
+	evictedAt  time.Time
 
 	conns atomic.Int64
 }
@@ -76,10 +77,15 @@ func (s *State) ReportFailure(fall int) {
 
 	s.fails++
 	if s.fails >= fall {
-		s.phase.Store(int32(Evicted))
-		s.evictedAt = time.Now()
-		s.fails = 0
+		s.evictLocked()
 	}
+}
+
+func (s *State) evictLocked() {
+	s.phase.Store(int32(Evicted))
+	s.evictedAt = time.Now()
+	s.fails = 0
+	s.probeFails = 0
 }
 
 // Passive path
@@ -114,11 +120,26 @@ func (s *State) BeginProbation(cooldown time.Duration) bool {
 // BE is promoted Cooldown -> Probation on first success
 // Probation -> Healthy after 'rise' consecutive success
 // Any failures drops it back to Cooldown
-func (s *State) ProbeResult(ok bool, rise int) {
+func (s *State) ProbeResult(ok bool, rise int, fall int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	phase := Phase(s.phase.Load())
+
+	if phase == Healthy {
+		if fall == 0 {
+			return
+		}
+		if ok {
+			s.probeFails = 0
+			return
+		}
+		s.probeFails++
+		if s.probeFails >= fall {
+			s.evictLocked()
+		}
+		return
+	}
 
 	if phase != Cooldown && phase != Probation {
 		return

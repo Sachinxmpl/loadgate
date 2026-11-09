@@ -130,6 +130,10 @@ type ActiveHealth struct {
 	// HTTP path to GET, eg "/health", a 2xx is a pass
 	// Empty -> only check TCP connect succeeds
 	Path string `yaml:"path"`
+
+	// Failed proes in a row that evict a healthy backend
+	// 0 -> probes never evict a backend, only passive health does
+	Fall int `yaml:"fall"`
 }
 
 type PassiveHealth struct {

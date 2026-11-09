@@ -146,6 +146,40 @@ func TestManager_HTTPProbeChecksStatus(t *testing.T) {
 
 }
 
+// With health.active.fall set, a backend that is Healthy (no passive failures at all) is evicted by the prober when /health starts failing, and readmitted when it recovers
+func TestManager_ActiveFallEvictsHealthyBackend(t *testing.T) {
+	var healthy atomic.Bool
+	healthy.Store(true)
+	be := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !healthy.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}))
+	defer be.Close()
+	addr := strings.TrimPrefix(be.URL, "http://")
+
+	reg := NewRegistry()
+	added, _ := reg.Reconcile([]string{addr})
+	h := testHealth(20*time.Millisecond, 100*time.Millisecond, 40*time.Millisecond, 2, 3)
+	h.Active.Path = "/health"
+	h.Active.Fall = 2
+	mgr := NewManager(reg, h, discardLog(), nil)
+	mgr.Sync(added, nil)
+	defer mgr.Stop()
+
+	st := reg.Get(addr)
+
+	healthy.Store(false)
+	if !waitFor(time.Second, func() bool { return !st.Admits() }) {
+		t.Fatalf("healthy backend whose /health fails was not evicted; phase = %v", st.Phase())
+	}
+
+	healthy.Store(true)
+	if !waitFor(2*time.Second, st.Admits) {
+		t.Fatalf("backend was not readmitted after /health recovered; phase = %v", st.Phase())
+	}
+}
+
 // Removed backends probers are cancelled, and no goroutine leaks.
 func TestManager_SyncStartsAndStopsProbers(t *testing.T) {
 

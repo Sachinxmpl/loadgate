@@ -19,7 +19,8 @@ health:
     interval: 2s
     timeout: 500ms
     rise: 2
-    path: /health
+    path: /health    # GET must answer 2xx; remove for a TCP-only check
+    fall: 3          # failed probes in a row that evict a healthy backend; 0 = probes only readmit
   passive:
     fall: 3
     cooldown: 10s

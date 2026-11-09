@@ -22,6 +22,7 @@ type Manager struct {
 	interval time.Duration
 	timeout  time.Duration
 	rise     int
+	fall     int
 	cooldown time.Duration
 
 	// HTTP probe; path == "" means TCP-connect probe only
@@ -45,6 +46,7 @@ func NewManager(reg *Registry, h config.Health, log *slog.Logger, onTransition f
 		interval: h.Active.Interval.Std(),
 		timeout:  h.Active.Timeout.Std(),
 		rise:     h.Active.Rise,
+		fall:     h.Active.Fall,
 		cooldown: h.Passive.Cooldown.Std(),
 		path:     h.Active.Path,
 		client: &http.Client{
@@ -108,14 +110,19 @@ func (m *Manager) probeLoop(ctx context.Context, addr string, st *State) {
 			before := st.Phase()
 			admitted := st.BeginProbation(m.cooldown)
 			m.reportTransition(addr, before, st.Phase())
-			if !admitted {
+
+			// Healthy backends are probed when active.fall is set
+			watching := m.fall > 0 && st.Phase() == Healthy
+			if !admitted && !watching {
 				continue
 			}
-
 			before = st.Phase()
 			ok := m.probeOnce(ctx, addr)
-			st.ProbeResult(ok, m.rise)
+			st.ProbeResult(ok, m.rise, m.fall)
 			m.reportTransition(addr, before, st.Phase())
+			if before == Healthy && st.Phase() == Evicted {
+				m.log.Warn("backend evicted by active probes", "backend", addr, "fall", m.fall)
+			}
 
 			if ok {
 				m.log.Debug("probe ok", "backend", addr, "phase", st.Phase())

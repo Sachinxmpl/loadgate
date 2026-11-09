@@ -51,4 +51,7 @@ func warnRestartRequired(old, new *config.Config, log *slog.Logger) {
 	if old.Balancer != new.Balancer {
 		log.Warn("balancer algorithm change needs a restart to take effect", "old", old.Balancer, "new", new.Balancer)
 	}
+	if old.Health != new.Health {
+		log.Warn("health settings change needs a restart to take effect")
+	}
 }
