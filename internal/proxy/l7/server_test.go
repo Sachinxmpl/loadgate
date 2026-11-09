@@ -376,3 +376,41 @@ func TestServeHTTP_AllEvictedFailsOpen(t *testing.T) {
 		t.Errorf("status = %d, want 200 from the evicted but alive backend (fail-open)", resp.StatusCode)
 	}
 }
+
+// With passive.fail_on_5xx, 5xx answers count toward passive.fall and still reach the client unchanged.
+func TestServeHTTP_FailOn5xx(t *testing.T) {
+	cases := []struct {
+		status  int
+		evicted bool
+	}{
+		{http.StatusInternalServerError, true},
+		{http.StatusServiceUnavailable, true},
+		{http.StatusNotFound, false},
+	}
+	for _, tc := range cases {
+		t.Run(http.StatusText(tc.status), func(t *testing.T) {
+			be := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+			}))
+			t.Cleanup(be.Close)
+
+			cfg := singlePoolL7(be)
+			cfg.Health.Passive.Fall = 2
+			cfg.Health.Passive.FailOn5xx = true
+			s := newL7(t, cfg)
+
+			for i := 0; i < 2; i++ {
+				resp := mustGet(t, s, "/")
+				resp.Body.Close()
+				if resp.StatusCode != tc.status {
+					t.Fatalf("status %d reached the client as %d", tc.status, resp.StatusCode)
+				}
+			}
+
+			st := s.registry.Get(strings.TrimPrefix(be.URL, "http://"))
+			if evicted := !st.Admits(); evicted != tc.evicted {
+				t.Errorf("after 2 answers of %d: evicted = %v, want %v", tc.status, evicted, tc.evicted)
+			}
+		})
+	}
+}

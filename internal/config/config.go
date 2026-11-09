@@ -139,6 +139,9 @@ type ActiveHealth struct {
 type PassiveHealth struct {
 	Fall     int      `yaml:"fall"`
 	Cooldown Duration `yaml:"cooldown"`
+
+	// l7 only, count 5xx responses as failures for passive health
+	FailOn5xx bool `yaml:"fail_on_5xx"`
 }
 
 type RateLimit struct {

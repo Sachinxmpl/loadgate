@@ -219,7 +219,11 @@ func (s *Server) forwardOnce(w http.ResponseWriter, r *http.Request, cfg *config
 	}
 	defer resp.Body.Close()
 
-	st.ReportSuccess()
+	if cfg.Health.Passive.FailOn5xx && resp.StatusCode >= 500 && resp.StatusCode <= 599 {
+		s.reportFailure(st, backend, cfg)
+	} else {
+		st.ReportSuccess()
+	}
 	stripHopByHop(resp.Header)
 	copyHeader(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)

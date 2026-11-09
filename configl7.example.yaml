@@ -24,6 +24,7 @@ health:
   passive:
     fall: 3
     cooldown: 10s
+    fail_on_5xx: false         # 5xx answers count toward fall
 
 trusted_proxies: []            # e.g. ["10.0.0.0/8"]; X-Forwarded-For from anyone else is dropped
 
