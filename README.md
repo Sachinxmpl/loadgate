@@ -84,7 +84,7 @@ LoadGate is configured by a single YAML file. Top-level fields:
 | `balancer` | string | `round_robin` | `round_robin`, `weighted_round_robin`, `least_connections`, or `consistent_hash` |
 | `tls` | object | *disabled* | L7 only. `{ cert, key }` paths; presence enables HTTPS |
 | `timeouts` | object | dial `2s`, read/write/request `30s`, response_header `10s`, idle `60s`, drain `15s` | connection and request deadlines (L4 uses only `dial` and `drain`) |
-| `health` | object | active `{ interval 2s, timeout 500ms, rise 2 }`, passive `{ fall 3, cooldown 10s }` | probing/readmission and eviction thresholds |
+| `health` | object | active `{ interval 2s, timeout 500ms, rise 2, path "" }`, passive `{ fall 3, cooldown 10s }` | probing/readmission and eviction thresholds. `active.path` (e.g. `/health`) makes the probe an HTTP GET that must answer 2xx; empty = TCP connect only |
 | `rate_limit` | object | `0` (unlimited) | `global_rps`, `per_client_rps` |
 | `max_connections` | int | `0` (unlimited) | L4 only (L7 relies on its read/idle timeouts). Connections over the limit are closed immediately. Keep it below ~⅙ of the FD limit (`ulimit -n`) |
 | `trusted_proxies` | list | `[]` (trust no one) | L7 only. IPs/CIDRs of proxies in front of LoadGate; their `X-Forwarded-For` is kept, from anyone else it is replaced by the client's IP |
